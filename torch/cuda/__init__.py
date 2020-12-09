@@ -8,6 +8,7 @@ It is lazily initialized, so you can always import it, and use
 :ref:`cuda-semantics` has more details about working with CUDA.
 """
 
+import sys
 import contextlib
 import os
 import torch
@@ -539,3 +540,10 @@ from . import sparse
 from . import profiler
 from . import nvtx
 from . import amp
+
+from torch.runtime import register_runtime
+
+
+current_module = sys.modules[__name__]
+register_runtime('cuda', current_module)
+

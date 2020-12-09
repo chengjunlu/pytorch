@@ -1,11 +1,15 @@
 import torch
 import torch._six
+from .runtime import current_runtime
 from typing import Optional
 import warnings
 from collections import defaultdict
 import sys
 import traceback
-
+from torch.runtime import (
+    get_runtime_attr,
+    get_device_type
+)
 
 def _type(self, dtype=None, non_blocking=False, **kwargs):
     """Returns the type if `dtype` is not provided, else casts this object to
@@ -429,33 +433,24 @@ class ExceptionWrapper(object):
 
 
 def _get_available_device_type():
-    if torch.cuda.is_available():
-        return "cuda"
-    # add more available device types here
-    return None
-
-
-def _get_device_attr(get_member):
-    device_type = _get_available_device_type()
-    if device_type.lower() == "cuda":
-        return get_member(torch.cuda)
-    # add more available device types here
+    if get_runtime_attr(lambda m: m.is_available()):
+        return get_device_type()
     return None
 
 
 def _get_current_device_index():
     # current device index
-    return _get_device_attr(lambda m: m.current_device())
+    return get_runtime_attr(lambda m: m.current_device())
 
 
 def _get_all_device_indices():
     # all device index
-    return _get_device_attr(lambda m: list(range(m.device_count())))
+    return get_runtime_attr(lambda m: list(range(m.device_count())))
 
 
 def _get_devices_properties(device_ids):
     # all device properties
-    return [_get_device_attr(lambda m: m.get_device_properties(i)) for i in device_ids]
+    return [get_runtime_attr(lambda m: m.get_device_properties(i)) for i in device_ids]
 
 
 def _get_device_index(device, optional=False, allow_cpu=False) -> int:
@@ -471,8 +466,8 @@ def _get_device_index(device, optional=False, allow_cpu=False) -> int:
     If :attr:`device` is a Python integer, it is returned as is.
 
     If :attr:`device` is ``None``, this will return the current default
-    device of the supported runtime platform if :attr:`optional` is ``True``.
-    i.e., the current default CUDA device will be returned if CUDA runtime is supported.
+    device of the current runtime platform if :attr:`optional` is ``True``.
+    i.e., the current default CUDA device will be returned if current runtime is CUDA.
     """
     if isinstance(device, str):
         device = torch.device(device)
@@ -491,3 +486,25 @@ def _get_device_index(device, optional=False, allow_cpu=False) -> int:
             raise ValueError('Expected a torch.device with a specified index '
                              'or an integer, but got:{}'.format(device))
     return device_idx
+
+
+def _get_device_type(device, optional=False, allow_cpu=False) -> str:
+    r"""TODO
+    """
+    if isinstance(device, str):
+        device = torch.device(device)
+    device_type: Optional[str]
+    device_type = None
+    if isinstance(device, torch.device):
+        if not allow_cpu and device.type == 'cpu':
+            raise ValueError('Expected a non cpu device, but got: {}'.format(device))
+        device_type = device.type
+    if isinstance(device, int):
+        device_type = _get_available_device_type()
+    if device_type is None:
+        if optional:
+            device_type = _get_available_device_type()
+        else:
+            raise ValueError('Expected a torch.device with a specified index '
+                             'or an integer or string, but got:{}'.format(device))
+    return device_type

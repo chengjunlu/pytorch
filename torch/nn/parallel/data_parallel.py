@@ -10,6 +10,7 @@ from torch._utils import (
     _get_all_device_indices,
     _get_available_device_type,
     _get_device_index,
+    _get_device_type,
     _get_devices_properties
 )
 
@@ -121,14 +122,19 @@ class DataParallel(Module):
     def __init__(self, module, device_ids=None, output_device=None, dim=0):
         super(DataParallel, self).__init__()
 
-        device_type = _get_available_device_type()
-        if device_type is None:
-            self.module = module
-            self.device_ids = []
-            return
-
         if device_ids is None:
+            device_type = _get_available_device_type()
+            if device_type is None:
+                self.module = module
+                self.device_ids = []
+                return
             device_ids = _get_all_device_indices()
+        else:
+            distinct_device_types = {_get_device_type(device_id, optional=True) for device_id in device_ids}
+            assert len(distinct_device_types) == 1, (
+                "DataParallel's device_ids must be the same type of devices, but device_ids locate in {}."
+            ).format(distinct_device_types)
+            device_type = list(distinct_device_types)[0]
 
         if output_device is None:
             output_device = device_ids[0]
@@ -198,10 +204,15 @@ def data_parallel(module, inputs, device_ids=None, output_device=None, dim=0, mo
     if not isinstance(inputs, tuple):
         inputs = (inputs,) if inputs is not None else ()
 
-    device_type = _get_available_device_type()
-
     if device_ids is None:
+        device_type = _get_available_device_type()
         device_ids = _get_all_device_indices()
+    else:
+        distinct_device_types = {_get_device_type(device_id, optional=True) for device_id in device_ids}
+        assert len(distinct_device_types) == 1, (
+            "DataParallel's device_ids must be the same type of devices, but device_ids locate in {}."
+        ).format(distinct_device_types)
+        device_type = list(distinct_device_types)[0]
 
     if output_device is None:
         output_device = device_ids[0]
